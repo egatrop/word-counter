@@ -2,9 +2,11 @@ package com.ivanou.wordcounter
 
 import java.io.{BufferedWriter, FileWriter}
 
+import scala.concurrent.duration.DurationInt
 import scala.io.Source
 import scala.util.{Failure, Try, Using}
 
+import akka.actor.ActorSystem
 import cats.implicits._
 import com.ivanou.wordcounter.metrics.withJmxMetrics
 import com.ivanou.wordcounter.utils.{withTimer, StringOps}
@@ -16,6 +18,17 @@ object Runner extends App with StrictLogging {
 
   private val counter = withJmxMetrics(Counter(config.order))
 
+  private val as = ActorSystem("word-counter")
+
+  private val logScheduler = {
+    val s = as.scheduler
+    s.scheduleWithFixedDelay(1.second, 1.second) { () =>
+      {
+        logger.info(s"Number of words counted [${counter.total}]")
+      }
+    }(as.dispatcher)
+  }
+
   withTimer {
     for {
       _ <- countWords()
@@ -23,6 +36,9 @@ object Runner extends App with StrictLogging {
       _ <- writeResult()
     } yield ()
   }
+
+  logScheduler.cancel()
+  as.terminate()
 
   def countWords() = {
     Using(Source.fromFile(config.in)) { file =>
