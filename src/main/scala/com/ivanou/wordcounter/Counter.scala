@@ -13,7 +13,7 @@ class Counter(val order: SortOrder) {
 
   private val wc = new AtomicInteger(0)
 
-  def insert(word: String) {
+  def count(word: String) {
     wc.incrementAndGet()
     map.update(word, map(word) + 1)
   }
@@ -34,8 +34,8 @@ object Counter {
       case MinCount =>
         counter.map.toSeq.sortWith(_._2 < _._2)
     }
-    ListMap(sorted: _*).foldLeft("") { case (res, (k, v)) => s"$res$k $v\n" }
+    ListMap(sorted: _*).foldLeft("") { case (res, (k, v)) => s"$res$k,$v\n" }
   }
 
-  def apply(order: SortOrder) = new Counter(order)
+  def apply(order: SortOrder): Counter = new Counter(order)
 }

@@ -6,14 +6,15 @@ import scala.io.Source
 import scala.util.{Failure, Try, Using}
 
 import cats.implicits._
-import com.ivanou.wordcounter.utils.{StringOps, withTimer}
+import com.ivanou.wordcounter.metrics.withJmxMetrics
+import com.ivanou.wordcounter.utils.{withTimer, StringOps}
 import com.typesafe.scalalogging.StrictLogging
 
 object Runner extends App with StrictLogging {
 
   private val config = Config.parseArgs(args)
 
-  private val counter = Counter(config.order)
+  private val counter = withJmxMetrics(Counter(config.order))
 
   withTimer {
     for {
@@ -29,7 +30,7 @@ object Runner extends App with StrictLogging {
       file
         .getLines()
         .flatMap(_.asWords)
-        .foreach(counter.insert)
+        .foreach(counter.count)
     }.recover(e => {
       logger.error(s"Failed to count the words: ${e.getMessage}")
       Failure(e)
