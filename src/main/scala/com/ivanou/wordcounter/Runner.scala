@@ -4,20 +4,21 @@ import java.io.{BufferedWriter, FileWriter}
 
 import scala.concurrent.duration.DurationInt
 import scala.io.Source
-import scala.util.{Failure, Try, Using}
+import scala.util.{Try, Using}
 
 import akka.actor.ActorSystem
 import cats.implicits._
-import com.ivanou.wordcounter.Counter.showMostFrequent
+import com.ivanou.wordcounter.Counter.showArray
+import com.ivanou.wordcounter.Counter.showMap
 import com.ivanou.wordcounter.metrics.withJmxMetrics
-import com.ivanou.wordcounter.utils.{withTimer, StringOps}
+import com.ivanou.wordcounter.utils.withTimer
 import com.typesafe.scalalogging.StrictLogging
 
 object Runner extends App with StrictLogging {
 
   private val config = Config.parseArgs(args)
 
-  private val counter = withJmxMetrics(Counter(config.order))
+  private val counter = withJmxMetrics(Counter(config.order, config.topN))
 
   private val as = ActorSystem("word-counter")
 
@@ -32,41 +33,41 @@ object Runner extends App with StrictLogging {
 
   withTimer {
     for {
-      _ <- countWords()
+      _ <- fromFile(counter.countWords)
       if !counter.isEmpty
-      _ <- writeResult()
+      _ = logTotalAndTopN()
+      _ <- writeCsv()
     } yield ()
   }
 
   logScheduler.cancel()
   as.terminate()
 
-  def countWords() = {
-    Using(Source.fromResource(config.in)) { file =>
+  private def fromFile(f: Iterator[String] => Unit): Try[Unit] = {
+    Using(Source.fromFile(config.in)) { file =>
       logger.info(s"Starting to parse text from [${config.in}]")
-      file
-        .getLines()
-        .flatMap(_.asWords)
-        .foreach(counter.count)
+      f(file.getLines())
     }.recover(e => {
       logger.error(s"Failed to count the words: ${e.getMessage}")
-      Failure(e)
+      None
     })
   }
 
-  def writeResult(): Try[Unit] = {
+  private def logTotalAndTopN() {
+    logger.info(s"Total number of words [${counter.total}]")
+    logger.info(s"""Top ${counter.topN} most frequent words:
+                   |${counter.mostFrequentWords.show}
+                   |""".stripMargin)
+  }
+
+  private def writeCsv() = {
     Using(new FileWriter(config.out, false)) { fw =>
-      Using(new BufferedWriter(fw)) { writer =>
-        writer.write(counter.show)
-      }.fold(
-        e => logger.error(s"Failed to write data to [${config.out}]", e),
-        _ => {
-          logger.info(s"Total number of words [${counter.total}]")
-          logger.info(s"""Top ${counter.TopFrequentSize} most frequent words:
-                         |${counter.mostFrequentWords.show}
-                         |""".stripMargin)
-        }
-      )
+      Using(new BufferedWriter(fw)) { bw =>
+        bw.write(counter.sortedFrequencies(config.order).show)
+      }.recover(e => {
+        logger.error(s"Failed to write data to [${config.out}]", e)
+        e
+      }).get
     }
   }
 }
