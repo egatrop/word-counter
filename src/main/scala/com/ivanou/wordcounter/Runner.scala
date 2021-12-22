@@ -8,6 +8,7 @@ import scala.util.{Failure, Try, Using}
 
 import akka.actor.ActorSystem
 import cats.implicits._
+import com.ivanou.wordcounter.Counter.showMostFrequent
 import com.ivanou.wordcounter.metrics.withJmxMetrics
 import com.ivanou.wordcounter.utils.{withTimer, StringOps}
 import com.typesafe.scalalogging.StrictLogging
@@ -41,7 +42,7 @@ object Runner extends App with StrictLogging {
   as.terminate()
 
   def countWords() = {
-    Using(Source.fromFile(config.in)) { file =>
+    Using(Source.fromResource(config.in)) { file =>
       logger.info(s"Starting to parse text from [${config.in}]")
       file
         .getLines()
@@ -59,7 +60,12 @@ object Runner extends App with StrictLogging {
         writer.write(counter.show)
       }.fold(
         e => logger.error(s"Failed to write data to [${config.out}]", e),
-        _ => logger.info(s"Total number of words [${counter.total}]")
+        _ => {
+          logger.info(s"Total number of words [${counter.total}]")
+          logger.info(s"""Top ${counter.TopFrequentSize} most frequent words:
+                         |${counter.mostFrequentWords.show}
+                         |""".stripMargin)
+        }
       )
     }
   }

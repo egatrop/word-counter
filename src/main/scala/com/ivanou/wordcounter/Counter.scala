@@ -1,7 +1,5 @@
 package com.ivanou.wordcounter
 
-import java.util.concurrent.atomic.AtomicInteger
-
 import scala.collection.immutable.ListMap
 
 import cats.Show
@@ -9,18 +7,54 @@ import com.ivanou.wordcounter.SortOrder.{MaxCount, MinCount, Natural, SortOrder}
 
 class Counter(val order: SortOrder) {
 
-  private val map = collection.concurrent.TrieMap[String, Int]().withDefaultValue(0)
+  val TopFrequentSize = 10
 
-  private val wc = new AtomicInteger(0)
+  private val topWords = collection.mutable.Set[String]()
+
+  private var totalCount = 0
+  private val wordFrequencies = collection.mutable.Map[String, Int]().withDefaultValue(0)
 
   def count(word: String) {
-    wc.incrementAndGet()
-    map.update(word, map(word) + 1)
+    val count = wordFrequencies(word) + 1
+    wordFrequencies.update(word, count)
+    updateTopWords(word, count)
+    totalCount += 1
   }
 
-  def isEmpty: Boolean = map.isEmpty
+  private def updateTopWords(word: String, count: Int) {
+    if (topWords.contains(word)) {
+      return
+    }
 
-  def total: Int = wc.get()
+    if (topWords.size < TopFrequentSize) {
+      topWords.add(word)
+      return
+    }
+
+    var leastTopFrequentWord = topWords.head
+    var leastTopFrequentCount = wordFrequencies(leastTopFrequentWord)
+
+    topWords.foreach { word =>
+      val count = wordFrequencies(word)
+      if (count < leastTopFrequentCount) {
+        leastTopFrequentWord = word
+        leastTopFrequentCount = count
+      }
+    }
+
+    if (leastTopFrequentCount < count) {
+      topWords.remove(leastTopFrequentWord)
+      topWords.add(word)
+    }
+  }
+
+  def isEmpty: Boolean = wordFrequencies.isEmpty
+
+  def total: Int = totalCount
+
+  def mostFrequentWords: Array[(String, Int)] =
+    topWords.map { w => (w, wordFrequencies(w)) }.toArray.sortWith(_._2 > _._2)
+
 }
 
 object Counter {
@@ -28,13 +62,17 @@ object Counter {
   implicit val showCounter: Show[Counter] = Show.show { counter =>
     val sorted = counter.order match {
       case Natural =>
-        counter.map.toSeq.sorted
+        counter.wordFrequencies.toSeq.sorted
       case MaxCount =>
-        counter.map.toSeq.sortWith(_._2 > _._2)
+        counter.wordFrequencies.toSeq.sortWith(_._2 > _._2)
       case MinCount =>
-        counter.map.toSeq.sortWith(_._2 < _._2)
+        counter.wordFrequencies.toSeq.sortWith(_._2 < _._2)
     }
-    ListMap(sorted: _*).foldLeft("") { case (res, (k, v)) => s"$res$k,$v\n" }
+    ListMap(sorted: _*).foldLeft("") { case (res, (k, v)) => s"$res$k, $v\n" }
+  }
+
+  implicit val showMostFrequent: Show[Array[(String, Int)]] = Show.show { mostFrequent =>
+    mostFrequent.foldLeft("") { case (res, (word, count)) => s"$res$word $count\n" }
   }
 
   def apply(order: SortOrder): Counter = new Counter(order)
