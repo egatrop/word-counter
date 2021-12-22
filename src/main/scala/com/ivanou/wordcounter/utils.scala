@@ -15,9 +15,9 @@ object utils extends StrictLogging {
 
     def asWords: Array[String] =
       str
-        .trim
-        .split('.')
-        .flatMap(_.split(' '))
+        .toLowerCase
+        .replaceAll("[^A-Za-z-]", " ")
+        .split(" ")
         .filter(_.nonEmpty)
   }
 
