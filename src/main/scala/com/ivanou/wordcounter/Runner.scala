@@ -8,10 +8,8 @@ import scala.util.{Try, Using}
 
 import akka.actor.ActorSystem
 import cats.implicits._
-import com.ivanou.wordcounter.Counter.showArray
-import com.ivanou.wordcounter.Counter.showMap
-import com.ivanou.wordcounter.metrics.withJmxMetrics
-import com.ivanou.wordcounter.utils.withTimer
+import com.ivanou.wordcounter.Counter.{showArray, showMap}
+import com.ivanou.wordcounter.metrics.{withJmxMetrics, withTimer}
 import com.typesafe.scalalogging.StrictLogging
 
 object Runner extends App with StrictLogging {
@@ -33,7 +31,7 @@ object Runner extends App with StrictLogging {
 
   withTimer {
     for {
-      _ <- fromFile(counter.countWords)
+      _ <- fromFile(config.in)(counter.countWords)
       if !counter.isEmpty
       _ = logTotalAndTopN()
       _ <- writeCsv()
@@ -43,13 +41,12 @@ object Runner extends App with StrictLogging {
   logScheduler.cancel()
   as.terminate()
 
-  private def fromFile(f: Iterator[String] => Unit): Try[Unit] = {
-    Using(Source.fromFile(config.in)) { file =>
+  private def fromFile(file: String)(f: Iterator[String] => Unit): Try[Unit] = {
+    Using(Source.fromFile(file)) { file =>
       logger.info(s"Starting to parse text from [${config.in}]")
       f(file.getLines())
     }.recover(e => {
       logger.error(s"Failed to count the words: ${e.getMessage}")
-      None
     })
   }
 
